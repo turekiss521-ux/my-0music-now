@@ -1,9 +1,19 @@
 // ==================== 全局变量 ====================
-const API_BASE = "https://music-api.gdstudio.xyz/api.php";
-let playlist = JSON.parse(localStorage.getItem('playlist') || '[]'); // 持久化播放列表
+const APIS = {
+  main: "https://music-api.gdstudio.xyz/api.php",
+  backup1: "https://api.uomg.com/api/v1/music",  // 备选1: 支持多源，格式类似
+  backup2: "https://binaryify.github.io/NeteaseCloudMusicApi"  // 备选2: 网易专属fallback
+};
+let currentApi = APIS.main;  // 当前API
+let playlist = JSON.parse(localStorage.getItem('playlist') || '[]');
 let currentIndex = parseInt(localStorage.getItem('currentIndex') || '0');
 let lyricLines = [];
 let audio = document.getElementById('audio');
+
+// 请求限流：5分钟60次（只限搜索）
+const RATE_LIMIT_KEY = 'search_requests';
+const RATE_LIMIT_WINDOW = 5 * 60 * 1000;  // 5分钟ms
+const RATE_LIMIT_MAX = 60;
 
 // ==================== DOM 选择器 ====================
 const $ = id => document.getElementById(id);
@@ -31,61 +41,155 @@ const progressBar = document.querySelector('.progress-bar');
 // ==================== 初始化 ====================
 volumeSlider.value = localStorage.getItem('volume') || 80;
 audio.volume = volumeSlider.value / 100;
-renderPlaylist(); // 加载上次播放列表
-if (playlist.length > 0 && currentIndex < playlist.length) playCurrent(); // 恢复播放
+renderPlaylist();
+if (playlist.length > 0 && currentIndex < playlist.length) playCurrent();
+
+// ==================== 限流检查 ====================
+function checkRateLimit() {
+  let requests = JSON.parse(localStorage.getItem(RATE_LIMIT_KEY) || '[]');
+  const now = Date.now();
+  // 保留5分钟内请求
+  requests = requests.filter(time => now - time < RATE_LIMIT_WINDOW);
+  if (requests.length >= RATE_LIMIT_MAX) {
+    const waitTime = Math.ceil((RATE_LIMIT_WINDOW - (now - requests[0])) / 1000 / 60);  // 剩余分钟
+    alert(`请求过多，5分钟内最多60次搜索。请${waitTime}分钟后重试。`);
+    searchBtn.disabled = true;
+    setTimeout(() => { searchBtn.disabled = false; }, RATE_LIMIT_WINDOW - (now - requests[0]));
+    return false;
+  }
+  requests.push(now);
+  localStorage.setItem(RATE_LIMIT_KEY, JSON.stringify(requests));
+  return true;
+}
+
+// ==================== API 调用包装（带备用） ====================
+async function apiFetch(endpoint, params, type = 'search') {  // type: search/url/lyric/pic
+  const apis = [APIS.main, APIS.backup1, APIS.backup2];
+  let lastError = null;
+  for (let api of apis) {
+    try {
+      let url;
+      if (api === APIS.main) {
+        // 原API格式
+        url = `${api}${endpoint}?${new URLSearchParams(params).toString()}`;
+      } else if (api === APIS.backup1) {
+        // UOMG格式: /music.{type}?mid=ID&format=json (需适配搜索用keyword)
+        if (type === 'search') {
+          url = `${api}/music.search?keyword=${params.name}&count=${params.count || 30}&type=${params.source}`;
+        } else {
+          url = `${api}/music.${type}?mid=${params.id}&format=json&type=${params.source}`;
+        }
+      } else {  // NeteaseCloudMusicApi (只支持netease)
+        if (params.source !== 'netease') continue;  // 只fallback netease
+        url = `${api}/${type}?id=${params.id}`;
+      }
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data && (type === 'search' ? data.length > 0 : data.url || data.lyric)) {
+        currentApi = api;  // 成功切换当前API
+        return data;
+      }
+      lastError = new Error('Empty response');
+    } catch (e) {
+      lastError = e;
+      console.warn(`API ${api} failed:`, e);
+    }
+  }
+  throw lastError || new Error('All APIs failed');
+}
 
 // ==================== 搜索功能 ====================
 searchBtn.onclick = () => search();
 searchInput.addEventListener('keydown', e => e.key === 'Enter' && search());
 
 async function search(page = 1) {
+  if (!checkRateLimit()) return;  // 限流检查
+
   const keyword = searchInput.value.trim();
   if (!keyword) return alert('请输入关键词');
   
-  results.innerHTML = '<div class="loading">搜索中...</div>'; // 骨架屏
+  results.innerHTML = '<div class="loading">搜索中...</div>';
   const source = sourceSelect.value;
-  const url = `${API_BASE}?types=search&source=${source}&name=${encodeURIComponent(keyword)}&count=30&pages=${page}`;
+  const params = { types: 'search', source, name: keyword, count: 30, pages: page };
   
   try {
-    const res = await fetch(url);
-    const data = await res.json();
+    const data = await apiFetch('', params, 'search');  // 用包装函数
     
     results.innerHTML = '';
-    if (data.length === 0) {
+    if (!data || data.length === 0) {
       results.innerHTML = '<p>未找到结果，试试换个关键词或音乐源</p>';
       return;
     }
     
-    data.forEach((song, idx) => {
+    // 适配不同API响应（统一到原格式）
+    const songs = data.map(song => ({
+      id: song.id || song.songmid || song.rid,
+      name: song.name || song.songname,
+      artist: Array.isArray(song.artist) ? song.artist.map(a => a.name) : [song.singer || song.artist],
+      album: song.album || song.albumname,
+      pic_id: song.pic_id || song.albumpic || song.img,
+      lyric_id: song.lyric_id || song.id,
+      source
+    }));
+    
+    songs.forEach((song, idx) => {
       const div = document.createElement('div');
       div.className = 'song-item';
-      const picUrl = song.pic_id ? `${API_BASE}?types=pic&source=${source}&id=${song.pic_id}&size=300` : 'https://via.placeholder.com/60?text=No+Cover';
+      
+      // 预加载封面
+      const picUrl = await loadCover(song);  // 异步加载，确保显示
       div.innerHTML = `
-        <img src="${picUrl}" onerror="this.onerror=null; this.src='https://via.placeholder.com/60?text=Error'; console.warn('Pic load failed for:', song.name);" alt="cover">
+        <img src="${picUrl}" alt="cover" style="width:60px;height:60px;border-radius:8px;object-fit:cover;">
         <div class="info">
           <h4>${song.name}</h4>
           <p>${song.artist.join(' / ')} - ${song.album}</p>
         </div>
       `;
-      // 双击加入列表，单击播放
-      div.ondblclick = () => addToPlaylist(song, false); // 只加不播
+      div.ondblclick = () => addToPlaylist(song, false);
       div.onclick = (e) => { if (e.detail === 1) addToPlaylistAndPlay(song); };
       results.appendChild(div);
     });
   } catch (e) {
-    results.innerHTML = '<p style="color:red">搜索失败，请检查网络或换源</p>';
+    results.innerHTML = '<p style="color:red">搜索失败，所有API不可用。请刷新重试。</p>';
     console.error('Search error:', e);
   }
 }
 
+// ==================== 封面加载（优化+缓存） ====================
+async function loadCover(song) {
+  const cacheKey = `pic_${song.source}_${song.pic_id}`;
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) return cached;
+  
+  let picUrl;
+  try {
+    const params = { types: 'pic', source: song.source, id: song.pic_id, size: 300 };
+    const data = await apiFetch('', params, 'pic');
+    picUrl = data.url || data.cover;  // 适配响应
+  } catch (e) {
+    console.warn('Cover fetch failed:', e);
+  }
+  
+  // Fallback: 歌手头像或占位
+  if (!picUrl || !picUrl.startsWith('http')) {
+    picUrl = song.artist[0]?.pic || 'https://via.placeholder.com/60?text=No+Cover';
+  }
+  
+  // 缓存1小时
+  localStorage.setItem(cacheKey, picUrl);
+  setTimeout(() => localStorage.removeItem(cacheKey), 60 * 60 * 1000);
+  
+  return picUrl;
+}
+
 // ==================== 播放控制 ====================
 function addToPlaylist(song, playNow = true) {
-  // 去重检查
   const existIdx = playlist.findIndex(s => s.id === song.id && s.source === song.source);
   if (existIdx !== -1) {
     if (playNow) currentIndex = existIdx;
   } else {
-    song.source = song.source || sourceSelect.value; // 确保 source
+    song.source = song.source || sourceSelect.value;
     playlist.push(song);
     if (playNow) currentIndex = playlist.length - 1;
   }
@@ -104,24 +208,26 @@ async function playCurrent() {
 
   titleEl.textContent = song.name;
   artistEl.textContent = song.artist.join(' / ');
-  const picUrl = song.pic_id ? `${API_BASE}?types=pic&source=${song.source}&id=${song.pic_id}&size=500` : 'https://via.placeholder.com/60?text=No+Cover';
-  coverEl.src = picUrl;
-  coverEl.onerror = () => { coverEl.src = 'https://via.placeholder.com/60?text=Error'; }; // Fallback
+  
+  // 加载封面
+  coverEl.src = await loadCover(song);
+  coverEl.onerror = () => { coverEl.src = 'https://via.placeholder.com/60?text=Error'; };
 
-  // 获取播放 URL（加强降级 + fallback 源）
+  // 获取播放 URL（带备用+降级）
   let urlData = null;
-  const brLevels = [999, 320, 128]; // 无损 → 高 → 低
-  const fallbackSources = ['kuwo', 'migu', 'tencent']; // 如果当前源失败，试这些
+  const brLevels = [999, 320, 128];
+  const fallbackSources = ['kuwo', 'migu', 'tencent'];
   let triedSources = [song.source];
 
   for (let br of brLevels) {
     for (let fbSource of [song.source, ...fallbackSources.filter(s => !triedSources.includes(s))]) {
       try {
-        const urlRes = await fetch(`${API_BASE}?types=url&source=${fbSource}&id=${song.id}&br=${br}`);
-        urlData = await urlRes.json();
-        if (urlData && urlData.url && !urlData.url.includes('douyin.com') && urlData.url.includes('.mp3')) { // 过滤无效 URL
-          song.source = fbSource; // 更新源
-          console.log('Play URL success:', urlData.url, 'Source:', fbSource, 'BR:', urlData.br);
+        const params = { types: 'url', source: fbSource, id: song.id, br };
+        urlData = await apiFetch('', params, 'url');
+        // 适配响应
+        if (urlData && urlData.url && !urlData.url.includes('douyin.com') && (urlData.url.includes('.mp3') || urlData.url.includes('.m4a'))) {
+          song.source = fbSource;
+          console.log('Play URL success:', urlData.url, 'Source:', fbSource);
           break;
         }
       } catch (e) {
@@ -133,20 +239,15 @@ async function playCurrent() {
   }
 
   if (!urlData || !urlData.url) {
-    const errMsg = '加载歌曲失败：所有源/音质无效（可能是 kugou 失效）。建议切换到 kuwo/migu 源重搜。';
-    alert(errMsg);
-    console.error('No valid URL:', song);
+    alert('加载歌曲失败：所有API/源无效。建议换源重搜。');
     return;
   }
 
   audio.src = urlData.url;
-  audio.play().catch(e => {
-    alert('播放失败：' + e.message + '（检查浏览器权限或 VPN）');
-    console.error('Audio play error:', e);
-  });
+  audio.play().catch(e => alert('播放失败：' + e.message));
   playBtn.innerHTML = '<i class="fas fa-pause"></i>';
 
-  // 加载歌词
+  // 加载歌词（带备用）
   fetchLyric(song);
   highlightPlaylist();
   localStorage.setItem('currentIndex', currentIndex);
@@ -155,11 +256,10 @@ async function playCurrent() {
 function fetchLyric(song) {
   lyricContainer.classList.remove('show');
   lyricContainer.innerHTML = '<div>加载歌词中...</div>';
-  const lyricId = song.lyric_id || song.id;
-  fetch(`${API_BASE}?types=lyric&source=${song.source}&id=${lyricId}`)
-    .then(res => res.json())
+  const params = { types: 'lyric', source: song.source, id: song.lyric_id || song.id };
+  apiFetch('', params, 'lyric')
     .then(data => {
-      const lrc = data.lyric || '';
+      const lrc = data.lyric || data.lrc || '';
       if (lrc) {
         lyricLines = parseLrc(lrc);
         lyricContainer.innerHTML = '<div>歌词加载完成</div>';
@@ -172,7 +272,7 @@ function fetchLyric(song) {
     });
 }
 
-// LRC 解析函数（带时间戳）
+// LRC 解析函数
 function parseLrc(lrc) {
   const lines = lrc.split('\n');
   const result = [];
@@ -194,7 +294,6 @@ function parseLrc(lrc) {
 // ==================== 事件监听 ====================
 audio.addEventListener('timeupdate', () => {
   const curTime = audio.currentTime;
-  // 歌词高亮
   const activeLine = lyricLines.find((line, idx) => 
     line.time <= curTime && (!lyricLines[idx + 1] || lyricLines[idx + 1].time > curTime)
   );
@@ -203,14 +302,13 @@ audio.addEventListener('timeupdate', () => {
     lyricContainer.classList.add('show');
   }
 
-  // 进度条
   const percent = audio.duration ? (curTime / audio.duration) * 100 : 0;
   progressFill.style.width = percent + '%';
   currentTimeEl.textContent = formatTime(curTime);
   durationEl.textContent = formatTime(audio.duration || 0);
 });
 
-audio.addEventListener('ended', () => nextBtn.click()); // 自动下一首
+audio.addEventListener('ended', () => nextBtn.click());
 
 playBtn.onclick = () => {
   if (audio.paused) {
@@ -232,14 +330,12 @@ nextBtn.onclick = () => {
   playCurrent();
 };
 
-// 进度条拖拽
 progressBar.addEventListener('click', e => {
   const rect = progressBar.getBoundingClientRect();
   const percent = (e.clientX - rect.left) / rect.width;
   audio.currentTime = percent * audio.duration;
 });
 
-// 音量控制
 volumeSlider.oninput = () => {
   audio.volume = volumeSlider.value / 100;
   localStorage.setItem('volume', volumeSlider.value);
@@ -287,7 +383,6 @@ clearPlaylist.onclick = () => {
   }
 };
 
-// 点击外部关闭侧边栏
 document.addEventListener('click', e => {
   if (!e.target.closest('#playlist') && !e.target.closest('#playlistBtn')) {
     playlistPanel.classList.remove('show');
