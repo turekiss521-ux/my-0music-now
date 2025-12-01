@@ -125,18 +125,24 @@ window.addEventListener('load', () => {
     coverEl.src = picUrl;
     coverEl.onerror = () => { coverEl.src = PLACEHOLDER_COVER; };
 
-    try {
-      const data = await apiCall({ source, id: song.id, br: 320 }, 'url');
-      if (!data.url || data.url.indexOf('.mp3') === -1) throw new Error('无效链接');
-      audio.src = data.url;
-      audio.load();  // 借Solara
-      audio.play().catch(e => alert('播放失败: ' + e.message));
-      playBtn.innerHTML = '<i class="fas fa-pause"></i>';
-      console.log('Play URL:', data.url);
-    } catch (e) {
-      alert('加载失败，换源试试: ' + e.message);
-      return;
-    }
+   try {
+  let data;
+  let br = 320;
+  while (br >= 128) {
+    data = await apiCall({ source, id: song.id, br }, 'url');
+    if (data.url && data.url.indexOf('.mp3') > -1) break;
+    br = 128;  // fallback
+  }
+  if (!data.url || data.url.indexOf('.mp3') === -1) throw new Error('无效链接');
+  audio.src = data.url;
+  audio.load();
+  audio.play().catch(e => alert('播放失败: ' + e.message));
+  playBtn.innerHTML = '<i class="fas fa-pause"></i>';
+  console.log('Play URL:', data.url);
+} catch (e) {
+  alert('加载失败，换源试试: ' + e.message);
+  return;
+}
 
     // 歌词
     try {
