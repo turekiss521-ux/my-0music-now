@@ -116,55 +116,61 @@ window.addEventListener('load', () => {
   }
 
     // ==================== 播放（最终稳定版）===================
-  async function playCurrent() {
-    const song = playlist[currentIndex];
-    if (!song) return;
+  // ==================== 播放函数（最终版，基于你的成功数据） ====================
+async function playCurrent() {
+  const song = playlist[currentIndex];
+  if (!song) return;
 
-    titleEl.textContent = song.name;
-    artistEl.textContent = song.artist.join(' / ');
-    const source = song.source || sourceSelect.value || 'kuwo';
+  titleEl.textContent = song.name;
+  artistEl.textContent = song.artist.join(' / ');
+  const source = song.source || sourceSelect.value || 'kuwo';
 
-    // 封面
-    const picUrl = song.pic_id 
-      ? `/api.php?types=pic&source=${source}&id=${song.pic_id}&size=500` 
-      : PLACEHOLDER_COVER;
-    coverEl.src = picUrl;
-    coverEl.onerror = () => coverEl.src = PLACEHOLDER_COVER;
+  // 封面（用你的 pic_id 格式）
+  const picUrl = song.pic_id 
+    ? `/api.php?types=pic&source=${source}&id=${song.pic_id}&size=500` 
+    : PLACEHOLDER_COVER;
+  coverEl.src = picUrl;
+  coverEl.onerror = () => { coverEl.src = PLACEHOLDER_COVER; };
 
-    try {
-      let data;
-      let br = 320;
-      // 自动降级 320 → 128
-      while (br >= 128) {
-        data = await apiCall({ source, id: song.id, br }, 'url');
-        if (data.url && data.url.includes('.mp3')) break;
-        br = 128; // 降级
+  try {
+    let data;
+    let br = 320;  // 先试320
+    // 自动降级到128（很多歌320无版权）
+    while (br >= 128) {
+      data = await apiCall({ source, id: song.id, br }, 'url');
+      if (data.url && data.url.includes('.mp3')) {
+        console.log('找到可用链接:', data.url, '音质:', data.br);
+        break;
       }
-
-      if (!data.url || !data.url.includes('.mp3')) {
-        throw new Error('无可用音频链接');
-      }
-
-      audio.src = data.url;
-      audio.load();
-      await audio.play();
-      playBtn.innerHTML = '<i class="fas fa-pause"></i>';
-      console.log('成功播放:', data.url);
-
-      // 加载歌词
-      try {
-        const lrcData = await apiCall({ source, id: song.id }, 'lyric');
-        lyricLines = parseLrc(lrcData.lyric || '');
-      } catch (e) { console.warn('歌词加载失败'); }
-
-      highlightPlaylist();
-      localStorage.setItem('currentIndex', currentIndex);
-    } catch (e) {
-      alert('播放失败，换首歌或换源试试：' + e.message);
-      console.error(e);
+      br = 128;  // 降级
     }
-  }
 
+    if (!data.url || !data.url.includes('.mp3')) {
+      throw new Error('无可用音频链接（试试换源）');
+    }
+
+    audio.src = data.url;
+    audio.load();  // 强制重载
+    await audio.play();  // 等待播放
+    playBtn.innerHTML = '<i class="fas fa-pause"></i>';
+    console.log('播放成功！歌曲:', song.name);
+
+    // 歌词（用 lyric_id）
+    try {
+      const lrcData = await apiCall({ source, id: song.lyric_id || song.id }, 'lyric');
+      lyricLines = parseLrc(lrcData.lyric || '');
+      console.log('歌词加载成功');
+    } catch (e) { 
+      console.warn('歌词加载失败:', e.message); 
+    }
+
+    highlightPlaylist();
+    localStorage.setItem('currentIndex', currentIndex);
+  } catch (e) {
+    alert('播放失败：' + e.message + '\n建议：换源（酷我/咪咕）或换首歌试试');
+    console.error('播放错误:', e);
+  }
+}
     // 歌词
     try {
       const lrcData = await apiCall({ source, id: song.id }, 'lyric');
