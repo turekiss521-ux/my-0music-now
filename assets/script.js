@@ -40,6 +40,12 @@ window.addEventListener('load', () => {
   renderPlaylist();
   if (playlist.length > 0 && currentIndex < playlist.length) playCurrent();
 
+  // KV 加载历史（刷新不丢）
+  fetch('/kv-load').then(res => res.json()).then(({ history }) => {
+    if (history) playlist = history;
+    renderPlaylist();
+  }).catch(() => console.warn('KV 加载失败'));
+
   // ==================== 限流 ====================
   function checkRateLimit() {
     let requests = JSON.parse(localStorage.getItem(RATE_LIMIT_KEY) || '[]');
@@ -57,7 +63,7 @@ window.addEventListener('load', () => {
     return true;
   }
 
-  // ==================== API 调用（借鉴 GD：单源 + try-catch） ====================
+  // ==================== API 调用（单源版，借鉴 GD 原创） ====================
   async function apiFetch(params, type = 'search') {
     try {
       const url = `${API}?${new URLSearchParams({ ...params, types: type }).toString()}`;
@@ -129,6 +135,7 @@ window.addEventListener('load', () => {
       playlist.push(song);
       currentIndex = playlist.length - 1;
     }
+    savePlaylistToKV();  // KV 存
     localStorage.setItem('playlist', JSON.stringify(playlist));
     renderPlaylist();
     playCurrent();
@@ -179,17 +186,14 @@ window.addEventListener('load', () => {
       alert('播放失败：' + e.message + '\n建议：换源试试');
     }
   }
-// 存到 KV
-try {
-  fetch('/kv-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ playlist }) });
-} catch (e) { console.warn('KV 存失败'); }
-// 加载 KV 历史
-try {
-  const res = await fetch('/kv-load');
-  const { history } = await res.json();
-  if (history && history.length > 0) playlist = history;
-} catch (e) { console.warn('KV 加载失败'); }
-  
+
+  // KV 存历史
+  async function savePlaylistToKV() {
+    try {
+      await fetch('/kv-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ playlist }) });
+    } catch (e) { console.warn('KV 存失败'); }
+  }
+
   // 事件监听
   playBtn.onclick = () => {
     if (audio.paused) {
@@ -233,6 +237,7 @@ try {
     if (confirm('清空播放列表？')) {
       playlist = [];
       currentIndex = 0;
+      savePlaylistToKV();
       localStorage.setItem('playlist', JSON.stringify(playlist));
       renderPlaylist();
       audio.pause();
