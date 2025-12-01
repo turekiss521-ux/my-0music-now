@@ -114,10 +114,10 @@ window.addEventListener('load', () => {
       data.forEach(song => {
         const div = document.createElement('div');
         div.className = 'song-item';
-        const picUrl = song.pic_id ? `${API}?types=pic&source=${source}&id=${song.pic_id}&size=300` : PLACEHOLDER_COVER;
+        const picUrl = song.pic_id ? `${API}?types=pic&source=${source}&id=${song.pic_id}&size=300` : (song.id || song.songid ? `${API}?types=pic&source=${source}&id=${song.id || song.songid}&size=300` : PLACEHOLDER_COVER);
         div.innerHTML = `
           <img src="${picUrl}" onerror="this.src='${PLACEHOLDER_COVER}'" alt="cover">
-          <div class="info"><h4>${song.name}</h4><p>${(Array.isArray(song.artist) ? song.artist.join(' / ') : song.artist || '未知艺术家')} - ${song.album}</p></div>
+          <div class="info"><h4>${song.name || '未知歌曲'}</h4><p>${(Array.isArray(song.artist) ? song.artist.join(' / ') : song.artist || '未知艺术家')} - ${song.album || '未知专辑'}</p></div>
         `;
         div.onclick = () => addToPlaylistAndPlay(song);
         results.appendChild(div);
@@ -150,7 +150,7 @@ window.addEventListener('load', () => {
     const source = song.source || 'kuwo';
 
     // 封面
-    const picUrl = song.pic_id ? `${API}?types=pic&source=${source}&id=${song.pic_id}&size=500` : PLACEHOLDER_COVER;
+    const picUrl = song.pic_id ? `${API}?types=pic&source=${source}&id=${song.pic_id}&size=500` : (song.id || song.songid ? `${API}?types=pic&source=${source}&id=${song.id || song.songid}&size=500` : PLACEHOLDER_COVER);
     coverEl.src = picUrl;
     coverEl.onerror = () => { coverEl.src = PLACEHOLDER_COVER; };
 
@@ -159,11 +159,11 @@ window.addEventListener('load', () => {
       let br = 320;
       // 先试 320k
       // 修复：Worker 代理不再返回 br，因此 br 参数仅用于上游 API，不用于前端逻辑判断
-      data = await apiFetch({ source, id: song.id, br }, 'url');
+      data = await apiFetch({ source, id: song.id || song.songid, br }, 'url');
       if (!data.url) {
         console.log('320k 失败，降级 128k...');
         br = 128;
-        data = await apiFetch({ source, id: song.id, br }, 'url');
+        data = await apiFetch({ source, id: song.id || song.songid, br }, 'url');
       }
 
       if (!data.url) {
@@ -179,7 +179,7 @@ window.addEventListener('load', () => {
 
       // 歌词
       try {
-        const lrcData = await apiFetch({ source, id: song.lyric_id || song.id }, 'lyric');
+        const lrcData = await apiFetch({ source, id: song.lyric_id || song.id || song.songid }, 'lyric');
         lyricLines = parseLrc(lrcData.lyric || '');
       } catch (e) { console.warn('歌词失败:', e.message); }
 
@@ -278,3 +278,4 @@ window.addEventListener('load', () => {
     return `${Math.floor(s / 60).toString().padStart(2, '0')}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
   }
 });
+
