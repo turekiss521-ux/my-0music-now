@@ -117,7 +117,7 @@ window.addEventListener('load', () => {
         const picUrl = song.pic_id ? `${API}?types=pic&source=${source}&id=${song.pic_id}&size=300` : PLACEHOLDER_COVER;
         div.innerHTML = `
           <img src="${picUrl}" onerror="this.src='${PLACEHOLDER_COVER}'" alt="cover">
-          <div class="info"><h4>${song.name}</h4><p>${song.artist.join(' / ')} - ${song.album}</p></div>
+          <div class="info"><h4>${song.name}</h4><p>${(Array.isArray(song.artist) ? song.artist.join(' / ') : song.artist || '未知艺术家')} - ${song.album}</p></div>
         `;
         div.onclick = () => addToPlaylistAndPlay(song);
         results.appendChild(div);
@@ -146,7 +146,7 @@ window.addEventListener('load', () => {
     const song = playlist[currentIndex];
     if (!song) return;
     titleEl.textContent = song.name;
-    artistEl.textContent = song.artist.join(' / ');
+    artistEl.textContent = Array.isArray(song.artist) ? song.artist.join(' / ') : song.artist || '未知艺术家';
     const source = song.source || 'kuwo';
 
     // 封面
@@ -257,7 +257,7 @@ window.addEventListener('load', () => {
     playlistUl.innerHTML = '';
     playlist.forEach((s, i) => {
       const li = document.createElement('li');
-      li.textContent = `${s.name} - ${s.artist.join(' / ')}`;
+      li.textContent = `${s.name} - ${Array.isArray(s.artist) ? s.artist.join(' / ') : s.artist || '未知艺术家'}`;
       li.onclick = () => {
         currentIndex = i;
         playCurrent();
