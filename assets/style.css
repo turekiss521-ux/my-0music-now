@@ -1,0 +1,72 @@
+:root {
+  --primary: #e91e63;
+  --bg: #121212;
+  --card: #1e1e1e;
+  --text: #fff;
+  --text2: #b3b3b3;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: "Microsoft YaHei", Arial; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+.login-body { display:flex; align-items:center; justify-content:center; height:100vh; background: linear-gradient(135deg,#667eea,#764ba2); }
+.login-box { background:rgba(0,0,0,0.8); padding:40px; border-radius:16px; width:320px; text-align:center; }
+.login-box input { width:100%; padding:12px; margin:10px 0; border:none; border-radius:8px; background:#333; color:white; }
+.login-box button { width:100%; padding:12px; background:var(--primary); color:white; border:none; border-radius:8px; cursor:pointer; font-size:16px; }
+.tip { margin-top:15px; font-size:12px; color:#aaa; }
+
+/* 播放器主体 */
+.search-bar { padding:20px; display:flex; gap:10px; background:#000; position:sticky; top:0; z-index:10; }
+.search-bar input { flex:1; padding:12px; border:none; border-radius:8px; background:#333; color:white; }
+.search-bar select, .search-bar button { padding:12px; border:none; border-radius:8px; background:var(--primary); color:white; cursor:pointer; }
+
+.results { padding:20px; display:grid; gap:12px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.song-item {
+  background:var(--card); border-radius:12px; padding:12px; display:flex; align-items:center; gap:15px; cursor:pointer; transition:0.3s;
+}
+.song-item:hover { background:#333; }
+.song-item img { width:60px; height:60px; border-radius:8px; object-fit:cover; }
+.song-item .info h4 { margin:0; font-size:15px; }
+.song-item .info p { margin:0; font-size:13px; color:var(--text2); }
+
+/* 底部播放器 */
+.player {
+  position:fixed; bottom:0; left:0; right:0; background:#000; padding:15px; display:flex; align-items:center; gap:20px; border-top:1px solid #333;
+}
+.player .info { display:flex; align-items:center; gap:15px; min-width:200px; }
+.player img { width:60px; height:60px; border-radius:8px; }
+.controls button { background:none; border:none; color:white; font-size:24px; cursor:pointer; margin:0 5px; }
+#playBtn { font-size:36px; }
+
+.progress { flex:1; display:flex; align-items:center; gap:10px; }
+.progress-bar { flex:1; height:6px; background:#333; border-radius:3px; overflow:hidden; cursor:pointer; }
+#progressFill { height:100%; width:0%; background:var(--primary); transition: width 0.2s; }
+
+.volume { display:flex; align-items:center; gap:8px; }
+.volume input { width:80px; }
+
+.playlist-hidden { transform:translateX(-100%); }
+#playlist {
+  position:fixed; left:0; top:0; bottom:0; width:320px; background:#1a1a1a; overflow-y:auto; transition:0.4s; z-index:100;
+}
+#playlist.show { transform:translateX(0); }
+#playlist h3 { padding:20px; border-bottom:1px solid #333; }
+#closePlaylist { float:right; font-size:28px; cursor:pointer; }
+#playlistUl li { padding:12px 20px; cursor:pointer; border-bottom:1px solid #333; }
+#playlistUl li.playing { background:var(--primary); color:white; }
+
+.lyric-hidden { opacity:0; pointer-events:none; }
+#lyricContainer {
+  position:fixed; bottom:100px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); padding:20px 30px; border-radius:12px;
+  max-width:90%; text-align:center; transition:0.4s; font-size:18px; line-height:2; color:var(--text);
+}
+#lyricContainer.show { opacity:1; }
+
+.clear { text-align:center; padding:15px; color:#aaa; cursor:pointer; border-top:1px solid #333; }
+.clear:hover { color:var(--primary); }
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .search-bar { flex-direction:column; }
+  #playlist { width:100%; }
+}
