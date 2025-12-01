@@ -58,19 +58,19 @@ window.addEventListener('load', () => {
   }
 
   // ==================== API调用 (借Solara: 简单fetch + CORS由Workers处理) ====================
-  async function apiCall(params, type) {
-    try {
-      const url = `${API}?${new URLSearchParams({ ...params, types: type }).toString()}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      console.log(`API success (${type})`);
-      return data;
-    } catch (e) {
-      console.warn('API failed (' + type + '):', e.message);
-      throw e;
-    }
+ async function apiCall(params, type) {
+  try {
+    const url = `${API}/api.php?${new URLSearchParams({ ...params, types: type }).toString()}`;  // 加 /api.php
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    console.log(`API success (${type})`);
+    return data;
+  } catch (e) {
+    console.warn('API failed (' + type + '):', e.message);
+    throw e;
   }
+}
 
   // ==================== 搜索 ====================
   searchBtn.onclick = () => search();
