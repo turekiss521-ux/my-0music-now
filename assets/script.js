@@ -1,5 +1,5 @@
 // ==================== 全局变量 ====================
-const API = "/api";  // 代理到Workers，绕CORS
+const API = "";  // 代理到Workers，绕CORS
 let playlist = JSON.parse(localStorage.getItem('playlist') || '[]');
 let currentIndex = parseInt(localStorage.getItem('currentIndex') || '0');
 let lyricLines = [];
@@ -60,7 +60,7 @@ window.addEventListener('load', () => {
   // ==================== API调用 (借Solara: 简单fetch + CORS由Workers处理) ====================
  async function apiCall(params, type) {
   try {
-    const url = `${API}/api.php?${new URLSearchParams({ ...params, types: type }).toString()}`;  // 加 /api.php
+    const url = `/api.php?${new URLSearchParams({ ...params, types: type }).toString()}`;  // 加 /api.php
     const res = await fetch(url);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
@@ -115,34 +115,55 @@ window.addEventListener('load', () => {
     playCurrent();
   }
 
+    // ==================== 播放（最终稳定版）===================
   async function playCurrent() {
     const song = playlist[currentIndex];
     if (!song) return;
+
     titleEl.textContent = song.name;
     artistEl.textContent = song.artist.join(' / ');
-    const source = song.source || sourceSelect.value;
-    const picUrl = song.pic_id ? `${API}?types=pic&source=${source}&id=${song.pic_id}&size=500` : PLACEHOLDER_COVER;
-    coverEl.src = picUrl;
-    coverEl.onerror = () => { coverEl.src = PLACEHOLDER_COVER; };
+    const source = song.source || sourceSelect.value || 'kuwo';
 
-   try {
-  let data;
-  let br = 320;
-  while (br >= 128) {
-    data = await apiCall({ source, id: song.id, br }, 'url');
-    if (data.url && data.url.indexOf('.mp3') > -1) break;
-    br = 128;  // fallback
+    // 封面
+    const picUrl = song.pic_id 
+      ? `/api.php?types=pic&source=${source}&id=${song.pic_id}&size=500` 
+      : PLACEHOLDER_COVER;
+    coverEl.src = picUrl;
+    coverEl.onerror = () => coverEl.src = PLACEHOLDER_COVER;
+
+    try {
+      let data;
+      let br = 320;
+      // 自动降级 320 → 128
+      while (br >= 128) {
+        data = await apiCall({ source, id: song.id, br }, 'url');
+        if (data.url && data.url.includes('.mp3')) break;
+        br = 128; // 降级
+      }
+
+      if (!data.url || !data.url.includes('.mp3')) {
+        throw new Error('无可用音频链接');
+      }
+
+      audio.src = data.url;
+      audio.load();
+      await audio.play();
+      playBtn.innerHTML = '<i class="fas fa-pause"></i>';
+      console.log('成功播放:', data.url);
+
+      // 加载歌词
+      try {
+        const lrcData = await apiCall({ source, id: song.id }, 'lyric');
+        lyricLines = parseLrc(lrcData.lyric || '');
+      } catch (e) { console.warn('歌词加载失败'); }
+
+      highlightPlaylist();
+      localStorage.setItem('currentIndex', currentIndex);
+    } catch (e) {
+      alert('播放失败，换首歌或换源试试：' + e.message);
+      console.error(e);
+    }
   }
-  if (!data.url || data.url.indexOf('.mp3') === -1) throw new Error('无效链接');
-  audio.src = data.url;
-  audio.load();
-  audio.play().catch(e => alert('播放失败: ' + e.message));
-  playBtn.innerHTML = '<i class="fas fa-pause"></i>';
-  console.log('Play URL:', data.url);
-} catch (e) {
-  alert('加载失败，换源试试: ' + e.message);
-  return;
-}
 
     // 歌词
     try {
