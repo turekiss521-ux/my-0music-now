@@ -8,26 +8,25 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
-  <!-- 顶部搜索栏 -->
+  <!-- 顶部搜索栏 (保持原) -->
   <div class="search-bar">
     <input type="text" id="searchInput" placeholder="搜歌曲 / 歌手 / 专辑..." autocomplete="off">
     <select id="sourceSelect">
-      <option value="netease">网易云</option>
+      <option value="kuwo">酷我 (推荐)</option>  <!-- 默认kuwo，借Solara稳源 -->
+      <option value="migu">咪咕</option>
       <option value="tencent">QQ音乐</option>
       <option value="kugou">酷狗</option>
-      <option value="kuwo">酷我</option>
-      <option value="migu">咪咕</option>
     </select>
     <button id="searchBtn"><i class="fas fa-search"></i></button>
   </div>
 
-  <!-- 搜索结果 -->
+  <!-- 搜索结果 (保持原) -->
   <div id="results" class="results"></div>
 
-  <!-- 播放器底部固定栏 -->
+  <!-- 播放器底部 (保持原) -->
   <div class="player">
     <div class="info">
-      <img id="cover" src="https://via.placeholder.com/60" alt="cover">
+      <img id="cover" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMzAiIGZpbGw9IiMzMzMiLz4KPHRleHQgeD0iMzAiIHk9IjM1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTk5IiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiPk5vIENvdmVyPC90ZXh0Pgo8L3N2Zz4K" alt="cover">  <!-- 内联base64，避免SSL -->
       <div>
         <div id="title">未播放</div>
         <div id="artist" class="small"></div>
@@ -56,21 +55,21 @@
     <button id="playlistBtn"><i class="fas fa-list"></i></button>
   </div>
 
-  <!-- 播放列表侧边栏 -->
+  <!-- 播放列表侧边栏 (保持原) -->
   <div id="playlist" class="playlist-hidden">
     <h3>播放列表 <span id="closePlaylist">×</span></h3>
     <ul id="playlistUl"></ul>
     <div class="clear" id="clearPlaylist">清空列表</div>
   </div>
 
-  <!-- 歌词显示 -->
+  <!-- 歌词显示 (保持原) -->
   <div id="lyricContainer" class="lyric-hidden"></div>
 
-  <audio id="audio" preload="none"></audio>
+  <audio id="audio" preload="metadata"></audio>  <!-- 借Solara: preload=metadata，减延迟 -->
 
   <script src="assets/script.js"></script>
   <script>
-    // 简单认证拦截（刷新后需重新登录）
+    // 认证拦截 (保持原)
     if (!localStorage.getItem('auth_token')) {
       location.href = '/';
     }
