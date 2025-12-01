@@ -76,7 +76,7 @@ window.addEventListener('load', () => {
         console.log('搜索成功！', data.length, '首歌');
         return data;
       }
-      if (type === 'url' && data.url && data.url.includes('.mp3')) {
+      if (type === 'url' && data.url) {
         console.log('链接成功！音质:', data.br);
         return data;
       }
@@ -158,13 +158,13 @@ window.addEventListener('load', () => {
       let br = 320;
       // 先试 320k
       data = await apiFetch({ source, id: song.id, br }, 'url');
-      if (!data.url || !data.url.includes('.mp3')) {
+      if (!data.url) {
         console.log('320k 失败，降级 128k...');
         br = 128;
         data = await apiFetch({ source, id: song.id, br }, 'url');
       }
 
-      if (!data.url || !data.url.includes('.mp3')) {
+      if (!data.url) {
         throw new Error('无可用音频链接');
       }
 
