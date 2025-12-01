@@ -61,7 +61,7 @@ async function search(page = 1) {
       div.className = 'song-item';
       const picUrl = song.pic_id ? `${API_BASE}?types=pic&source=${source}&id=${song.pic_id}&size=300` : 'https://via.placeholder.com/60?text=No+Cover';
       div.innerHTML = `
-        <img src="${picUrl}" onerror="this.src='https://via.placeholder.com/60?text=Error'" alt="cover">
+        <img src="${picUrl}" onerror="this.onerror=null; this.src='https://via.placeholder.com/60?text=Error'; console.warn('Pic load failed for:', song.name);" alt="cover">
         <div class="info">
           <h4>${song.name}</h4>
           <p>${song.artist.join(' / ')} - ${song.album}</p>
@@ -74,7 +74,7 @@ async function search(page = 1) {
     });
   } catch (e) {
     results.innerHTML = '<p style="color:red">搜索失败，请检查网络或换源</p>';
-    console.error(e);
+    console.error('Search error:', e);
   }
 }
 
@@ -106,25 +106,45 @@ async function playCurrent() {
   artistEl.textContent = song.artist.join(' / ');
   const picUrl = song.pic_id ? `${API_BASE}?types=pic&source=${song.source}&id=${song.pic_id}&size=500` : 'https://via.placeholder.com/60?text=No+Cover';
   coverEl.src = picUrl;
+  coverEl.onerror = () => { coverEl.src = 'https://via.placeholder.com/60?text=Error'; }; // Fallback
 
-  // 获取播放 URL（优先无损，降级到 320k）
-  try {
-    let br = 999;
-    let urlData;
-    while (br >= 128) {
-      const urlRes = await fetch(`${API_BASE}?types=url&source=${song.source}&id=${song.id}&br=${br}`);
-      urlData = await urlRes.json();
-      if (urlData.url) break;
-      br -= 128; // 降级
+  // 获取播放 URL（加强降级 + fallback 源）
+  let urlData = null;
+  const brLevels = [999, 320, 128]; // 无损 → 高 → 低
+  const fallbackSources = ['kuwo', 'migu', 'tencent']; // 如果当前源失败，试这些
+  let triedSources = [song.source];
+
+  for (let br of brLevels) {
+    for (let fbSource of [song.source, ...fallbackSources.filter(s => !triedSources.includes(s))]) {
+      try {
+        const urlRes = await fetch(`${API_BASE}?types=url&source=${fbSource}&id=${song.id}&br=${br}`);
+        urlData = await urlRes.json();
+        if (urlData && urlData.url && !urlData.url.includes('douyin.com') && urlData.url.includes('.mp3')) { // 过滤无效 URL
+          song.source = fbSource; // 更新源
+          console.log('Play URL success:', urlData.url, 'Source:', fbSource, 'BR:', urlData.br);
+          break;
+        }
+      } catch (e) {
+        console.warn(`URL fetch failed for ${fbSource} br=${br}:`, e);
+      }
+      triedSources.push(fbSource);
     }
-    if (!urlData.url) throw new Error('无可用链接');
-    audio.src = urlData.url;
-    audio.play();
-    playBtn.innerHTML = '<i class="fas fa-pause"></i>';
-  } catch (e) {
-    alert('加载歌曲失败：' + e.message);
+    if (urlData && urlData.url) break;
+  }
+
+  if (!urlData || !urlData.url) {
+    const errMsg = '加载歌曲失败：所有源/音质无效（可能是 kugou 失效）。建议切换到 kuwo/migu 源重搜。';
+    alert(errMsg);
+    console.error('No valid URL:', song);
     return;
   }
+
+  audio.src = urlData.url;
+  audio.play().catch(e => {
+    alert('播放失败：' + e.message + '（检查浏览器权限或 VPN）');
+    console.error('Audio play error:', e);
+  });
+  playBtn.innerHTML = '<i class="fas fa-pause"></i>';
 
   // 加载歌词
   fetchLyric(song);
