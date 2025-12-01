@@ -6,7 +6,7 @@ let lyricLines = [];
 const RATE_LIMIT_KEY = 'search_requests';
 const RATE_LIMIT_WINDOW = 5 * 60 * 1000;
 const RATE_LIMIT_MAX = 60;
-const PLACEHOLDER_COVER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMzAiIGZpbGw9IiMzMzMiLz4KPHRleHQgeD0iMzAiIHk9IjM1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTk5IiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiPk5vIENvdmVyPC90ZXh0Pgo8L3N2Zz4K';
+const PLACEHOLDER_COVER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMzAiIGZpbGw9IiMzMzMiLz4KPHRleHQgeD0iMzAiIHk9IjM1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTk5IiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiPk5vIENvdmVyPC90ZXh0Pgo8L3N2Zz4K';
 
 // ==================== DOM & 初始化 ====================
 window.addEventListener('load', () => {
@@ -76,8 +76,9 @@ window.addEventListener('load', () => {
         console.log('搜索成功！', data.length, '首歌');
         return data;
       }
+      // 修复：Worker 返回 { code: 200, url: proxyUrl }，不再包含 br
       if (type === 'url' && data.url) {
-        console.log('链接成功！音质:', data.br);
+        console.log('链接成功！');
         return data;
       }
       if (type === 'lyric' && data.lyric) {
@@ -157,6 +158,7 @@ window.addEventListener('load', () => {
       let data;
       let br = 320;
       // 先试 320k
+      // 修复：Worker 代理不再返回 br，因此 br 参数仅用于上游 API，不用于前端逻辑判断
       data = await apiFetch({ source, id: song.id, br }, 'url');
       if (!data.url) {
         console.log('320k 失败，降级 128k...');
@@ -172,7 +174,8 @@ window.addEventListener('load', () => {
       audio.load();
       await audio.play();
       playBtn.innerHTML = '<i class="fas fa-pause"></i>';
-      console.log('🎵 播放成功！', song.name, '音质:', data.br + 'k');
+      // 修复：Worker 代理不再返回 br，因此这里无法显示音质
+      console.log('🎵 播放成功！', song.name);
 
       // 歌词
       try {
