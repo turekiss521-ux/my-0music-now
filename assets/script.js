@@ -57,34 +57,37 @@ window.addEventListener('load', () => {
     return true;
   }
 
-  // ==================== API调用 (借Solara: 简单fetch + CORS由Workers处理) ====================
- // ==================== 终极版 API 调用（只用主源，永不崩溃）===================
+// ==================== API 调用（终极简版，只用主源） ====================
 async function apiFetch(params, type = 'search') {
   try {
-    // 直接用你的 Workers 代理的 gdstudio（最稳）
     const url = `/api.php?${new URLSearchParams({ ...params, types: type }).toString()}`;
     const res = await fetch(url);
     
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     
-    // 搜索返回数组，url/lyric/pic 返回对象
-    if (type === 'search' && data.length > 0) {
-      console.log('搜索成功，找到', data.length, '首');
+    // 检查数据有效
+    if (type === 'search' && Array.isArray(data) && data.length > 0) {
+      console.log('搜索成功！找到', data.length, '首歌');
       return data;
     }
-    if (type !== 'search' && data.url) {
-      console.log(`${type} 成功:`, data.url || data.lyric);
+    if (type === 'url' && data.url) {
+      console.log('播放链接成功！音质:', data.br);
       return data;
     }
-    throw new Error('数据为空');
+    if (type === 'lyric' && data.lyric) {
+      console.log('歌词成功！');
+      return data;
+    }
+    if (type === 'pic' && data.url) {
+      console.log('封面成功！');
+      return data;
+    }
+    
+    throw new Error('数据为空或无效');
   } catch (e) {
-    console.warn('API 调用失败:', e.message);
-    // 失败也不崩溃，给提示
-    if (type === 'url') {
-      alert('这首歌暂时无法播放，建议换源或换首歌试试');
-    }
-    throw e;
+    console.warn('API 失败:', e.message);
+    throw e;  // 抛出，让上层处理
   }
 }
 
@@ -131,7 +134,7 @@ async function apiFetch(params, type = 'search') {
     playCurrent();
   }
 
-// ==================== 播放函数（终极稳定版）===================
+// ==================== 播放函数（终极稳定版） ====================
 async function playCurrent() {
   const song = playlist[currentIndex];
   if (!song) return;
@@ -144,38 +147,46 @@ async function playCurrent() {
   coverEl.src = song.pic_id 
     ? `/api.php?types=pic&source=${source}&id=${song.pic_id}&size=500` 
     : PLACEHOLDER_COVER;
-  coverEl.onerror = () => coverEl.src = PLACEHOLDER_COVER;
+  coverEl.onerror = () => { coverEl.src = PLACEHOLDER_COVER; };
 
   try {
     let data;
     let br = 320;
+    // 自动降级 320 → 128
     while (br >= 128) {
       data = await apiFetch({ source, id: song.id, br }, 'url');
       if (data.url && data.url.includes('.mp3')) {
-        console.log('找到播放链接:', data.url, '音质:', br + 'k');
+        console.log('找到播放链接:', data.url.substring(0, 50) + '...', '音质:', data.br + 'k');
         break;
       }
-      br = 128; // 降级
+      br = 128;
+      console.log('320k 失败，降级到 128k...');
     }
 
-    if (!data.url) throw new Error('无可用链接');
+    if (!data || !data.url) {
+      throw new Error('无可用链接');
+    }
 
     audio.src = data.url;
     audio.load();
     await audio.play();
     playBtn.innerHTML = '<i class="fas fa-pause"></i>';
-    console.log('播放成功！');
+    console.log('🎵 播放成功！歌曲:', song.name);
 
     // 歌词
     try {
-      const lrc = await apiFetch({ source, id: song.lyric_id || song.id }, 'lyric');
-      lyricLines = parseLrc(lrc.lyric || '');
-    } catch (e) { console.warn('歌词加载失败'); }
+      const lrcData = await apiFetch({ source, id: song.lyric_id || song.id }, 'lyric');
+      lyricLines = parseLrc(lrcData.lyric || '');
+      console.log('歌词加载成功');
+    } catch (e) { 
+      console.warn('歌词失败:', e.message); 
+    }
 
     highlightPlaylist();
     localStorage.setItem('currentIndex', currentIndex);
   } catch (e) {
-    alert('播放失败：' + e.message + '\n建议：换源（酷我→咪咕）或换首歌');
+    alert('播放失败：' + e.message + '\n建议：换源（咪咕/QQ）或换首歌');
+    console.error('播放错误:', e);
   }
 }
 
