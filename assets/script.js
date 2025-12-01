@@ -1,5 +1,5 @@
 // ==================== 全局变量 ====================
-const API = "/api.php";  // 你的 Worker 主源，稳！
+const API = "/api.php";  // Worker 主源
 let playlist = JSON.parse(localStorage.getItem('playlist') || '[]');
 let currentIndex = parseInt(localStorage.getItem('currentIndex') || '0');
 let lyricLines = [];
@@ -57,7 +57,7 @@ window.addEventListener('load', () => {
     return true;
   }
 
-  // ==================== API 调用（单源版，借鉴 GD 原创） ====================
+  // ==================== API 调用（借鉴 GD：单源 + try-catch） ====================
   async function apiFetch(params, type = 'search') {
     try {
       const url = `${API}?${new URLSearchParams({ ...params, types: type }).toString()}`;
@@ -65,7 +65,7 @@ window.addEventListener('load', () => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       
-      // 验证数据（借鉴 GD）
+      // 验证数据
       if (type === 'search' && Array.isArray(data) && data.length > 0) {
         console.log('搜索成功！', data.length, '首歌');
         return data;
@@ -179,8 +179,18 @@ window.addEventListener('load', () => {
       alert('播放失败：' + e.message + '\n建议：换源试试');
     }
   }
-
-  // 事件监听（保持原）
+// 存到 KV
+try {
+  fetch('/kv-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ playlist }) });
+} catch (e) { console.warn('KV 存失败'); }
+// 加载 KV 历史
+try {
+  const res = await fetch('/kv-load');
+  const { history } = await res.json();
+  if (history && history.length > 0) playlist = history;
+} catch (e) { console.warn('KV 加载失败'); }
+  
+  // 事件监听
   playBtn.onclick = () => {
     if (audio.paused) {
       audio.play().catch(e => alert('播放失败：' + e.message));
