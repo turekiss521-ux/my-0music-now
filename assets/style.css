@@ -70,3 +70,6 @@ body { font-family: "Microsoft YaHei", Arial; background: var(--bg); color: var(
   .search-bar { flex-direction:column; }
   #playlist { width:100%; }
 }
+.song-item { transition: transform 0.2s; }
+.song-item:hover { transform: scale(1.02); box-shadow: 0 4px 8px rgba(233,30,99,0.3); }
+.loading { text-align: center; padding: 20px; color: #aaa; }
