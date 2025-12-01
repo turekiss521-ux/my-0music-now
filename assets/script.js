@@ -1,24 +1,17 @@
-// ==================== 全局变量 ====================
-const APIS = {
-  main: "https://music-api.gdstudio.xyz/api.php",
-  backup: "https://music.cyrilstudio.top",  // 兼容备选
-  newBackup: "https://musicapi.x007.workers.dev"  // 2025新免费源，支持直接搜索/流
-};
+// ==================== 全局变量 (借Solara简洁) ====================
+const API = "https://music-api.gdstudio.xyz/api.php";  // 主API，Solara单源稳
 let playlist = JSON.parse(localStorage.getItem('playlist') || '[]');
 let currentIndex = parseInt(localStorage.getItem('currentIndex') || '0');
 let lyricLines = [];
 const RATE_LIMIT_KEY = 'search_requests';
 const RATE_LIMIT_WINDOW = 5 * 60 * 1000;
 const RATE_LIMIT_MAX = 60;
-
-// 内联占位图（base64 SVG，避免SSL错误）
 const PLACEHOLDER_COVER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMzAiIGZpbGw9IiMzMzMiLz4KPHRleHQgeD0iMzAiIHk9IjM1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTk5IiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiPk5vIENvdmVyPC90ZXh0Pgo8L3N2Zz4K';
 
 // ==================== DOM & 初始化 ====================
-document.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('load', () => {  // 借Solara: window.onload，确保DOM ready
   const $ = id => document.getElementById(id);
   const audio = $('audio');
-  const volumeSlider = $('volumeSlider');
   const searchInput = $('searchInput');
   const sourceSelect = $('sourceSelect');
   const searchBtn = $('searchBtn');
@@ -32,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const progressFill = $('progressFill');
   const currentTimeEl = $('currentTime');
   const durationEl = $('duration');
+  const volumeSlider = $('volumeSlider');
   const playlistUl = $('playlistUl');
   const playlistPanel = $('playlist');
   const closePlaylist = $('closePlaylist');
@@ -40,15 +34,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const progressBar = document.querySelector('.progress-bar');
   const playlistBtn = $('playlistBtn');
 
-  if (volumeSlider) {
-    volumeSlider.value = localStorage.getItem('volume') || 80;
-    if (audio) audio.volume = volumeSlider.value / 100;
-  }
+  // 音量
+  volumeSlider.value = localStorage.getItem('volume') || 80;
+  audio.volume = volumeSlider.value / 100;
 
-  renderPlaylist(playlistUl);
-  if (playlist.length > 0 && currentIndex < playlist.length) playCurrent(audio, titleEl, artistEl, coverEl, playBtn, lyricContainer);
+  renderPlaylist();
+  if (playlist.length > 0 && currentIndex < playlist.length) playCurrent();
 
-  // ==================== 限流 ====================
+  // ==================== 限流 (保持你的) ====================
   function checkRateLimit() {
     let requests = JSON.parse(localStorage.getItem(RATE_LIMIT_KEY) || '[]');
     const now = Date.now();
@@ -65,48 +58,22 @@ document.addEventListener('DOMContentLoaded', () => {
     return true;
   }
 
-  // ==================== API调用 ====================
-  async function apiFetch(params, type = 'search') {
-    // 优先主API + 兼容备选
-    const apis = [APIS.main, APIS.backup];
-    for (let api of apis) {
-      try {
-        const url = `${api}?${new URLSearchParams({ ...params, types: type }).toString()}`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        if (data && (type === 'search' ? data.length > 0 : data.url)) {
-          console.log(`API success (${type}): ${api}`);
-          return data;
-        }
-      } catch (e) {
-        console.warn(`API ${api} failed (${type}):`, e.message);
-      }
-    }
-    // 新备选（直接搜索/流）
+  // ==================== API调用 (借Solara: 直接fetch + try-catch) ====================
+  async function apiCall(params, type) {
     try {
-      if (type === 'search') {
-        const res = await fetch(`${APIS.newBackup}/search?q=${params.name}&searchEngine=gaana`);
-        const data = await res.json();
-        if (data.response && data.response.length > 0) {
-          console.log('New API success (search)');
-          return data.response.map(s => ({ id: s.id, name: s.title, artist: [s.artist || 'Unknown'], album: 'Unknown', pic_id: s.img, source: params.source }));
-        }
-      } else if (type === 'url') {
-        const res = await fetch(`${APIS.newBackup}/fetch?id=${params.id}`);
-        const data = await res.json();
-        if (data.response) {
-          console.log('New API success (url)');
-          return { url: data.response };
-        }
-      }
+      const url = `${API}?${new URLSearchParams({ ...params, types: type }).toString()}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      console.log(`API success (${type})`);
+      return data;
     } catch (e) {
-      console.warn('New API failed:', e.message);
+      console.warn('API failed (' + type + '):', e.message);
+      throw e;
     }
-    throw new Error('All APIs failed - try refresh');
   }
 
-  // ==================== 搜索 ====================
+  // ==================== 搜索 (借Solara: 固定count=20, map简单) ====================
   searchBtn.onclick = () => search();
   searchInput.addEventListener('keydown', e => e.key === 'Enter' && search());
 
@@ -115,20 +82,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const keyword = searchInput.value.trim();
     if (!keyword) return alert('请输入关键词');
     results.innerHTML = '<p>搜索中...</p>';
-    const source = sourceSelect.value || 'kuwo';
+    const source = sourceSelect.value;
     try {
-      const data = await apiFetch({ source, name: keyword, count: 20 });
+      const data = await apiCall({ source, name: keyword, count: 20 }, 'search');
       results.innerHTML = '';
       if (data.length === 0) return results.innerHTML = '<p>无结果，换关键词试试</p>';
       data.forEach(song => {
         const div = document.createElement('div');
         div.className = 'song-item';
-        const picUrl = song.pic_id ? `${APIS.main}?types=pic&source=${source}&id=${song.pic_id}&size=300` : PLACEHOLDER_COVER;
+        const picUrl = song.pic_id ? `${API}?types=pic&source=${source}&id=${song.pic_id}&size=300` : PLACEHOLDER_COVER;
         div.innerHTML = `
           <img src="${picUrl}" onerror="this.src='${PLACEHOLDER_COVER}'" alt="cover">
           <div class="info"><h4>${song.name}</h4><p>${song.artist.join(' / ')} - ${song.album}</p></div>
         `;
-        div.onclick = () => addToPlaylistAndPlay(song, audio, titleEl, artistEl, coverEl, playBtn, lyricContainer);
+        div.onclick = () => addToPlaylistAndPlay(song);
         results.appendChild(div);
       });
     } catch (e) {
@@ -136,61 +103,53 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // ==================== 播放 ====================
-  function addToPlaylistAndPlay(song, audio, titleEl, artistEl, coverEl, playBtn, lyricContainer) {
+  // ==================== 播放 (借Solara: fixed br=320, audio.load(), strict .mp3 check) ====================
+  function addToPlaylistAndPlay(song) {
     const exist = playlist.findIndex(s => s.id === song.id);
     if (exist !== -1) currentIndex = exist;
     else {
       playlist.push(song);
       currentIndex = playlist.length - 1;
     }
-    savePlaylist(playlist);
-    renderPlaylist(playlistUl);
-    playCurrent(audio, titleEl, artistEl, coverEl, playBtn, lyricContainer);
+    localStorage.setItem('playlist', JSON.stringify(playlist));
+    renderPlaylist();
+    playCurrent();
   }
 
-  async function playCurrent(audio, titleEl, artistEl, coverEl, playBtn, lyricContainer) {
+  async function playCurrent() {
     const song = playlist[currentIndex];
     if (!song) return;
     titleEl.textContent = song.name;
     artistEl.textContent = song.artist.join(' / ');
-    coverEl.src = song.pic_id ? `${APIS.main}?types=pic&source=${song.source || 'kuwo'}&id=${song.pic_id}&size=500` : PLACEHOLDER_COVER;
+    const source = song.source || sourceSelect.value;
+    const picUrl = song.pic_id ? `${API}?types=pic&source=${source}&id=${song.pic_id}&size=500` : PLACEHOLDER_COVER;
+    coverEl.src = picUrl;
     coverEl.onerror = () => { coverEl.src = PLACEHOLDER_COVER; };
 
-    // URL降级（优化源顺序）
-    let url = null;
-    const sources = ['kuwo', 'migu', 'tencent'];
-    const brs = [320, 128];
-    for (let source of sources) {
-      for (let br of brs) {
-        try {
-          const data = await apiFetch({ source, id: song.id, br });
-          if (data.url && data.url.endsWith('.mp3')) {
-            url = data.url;
-            console.log('Play URL:', url);
-            break;
-          }
-        } catch (e) {
-          console.warn('URL try failed:', e);
-        }
-      }
-      if (url) break;
-    }
-    if (!url) return alert('歌曲源失效，换一首试试');
-    audio.src = url;
-    audio.play().catch(e => alert('播放错误: ' + e.message));
-    playBtn.innerHTML = '<i class="fas fa-pause"></i>';
-
-    // 歌词（简化）
     try {
-      const lrcData = await apiFetch({ source: song.source || 'kuwo', id: song.id }, 'lyric');
+      // 借Solara: fixed br=320, 验证 .mp3
+      const data = await apiCall({ source, id: song.id, br: 320 }, 'url');
+      if (!data.url || data.url.indexOf('.mp3') === -1) throw new Error('无效链接');
+      audio.src = data.url;
+      audio.load();  // 借Solara: 强制reload
+      audio.play().catch(e => alert('播放失败: ' + e.message));
+      playBtn.innerHTML = '<i class="fas fa-pause"></i>';
+      console.log('Play URL:', data.url);
+    } catch (e) {
+      alert('加载失败，换源试试: ' + e.message);  // 借Solara错误处理
+      return;
+    }
+
+    // 歌词 (借Solara parse)
+    try {
+      const lrcData = await apiCall({ source, id: song.id }, 'lyric');
       lyricLines = parseLrc(lrcData.lyric || '');
     } catch (e) { console.warn('Lyric failed'); }
-    highlightPlaylist(playlistUl, currentIndex);
+    highlightPlaylist();
     localStorage.setItem('currentIndex', currentIndex);
   }
 
-  // 事件（语法修复：无spread，用显式参数）
+  // 事件 (语法修复: 显式参数)
   playBtn.onclick = () => {
     if (audio.paused) {
       audio.play();
@@ -202,11 +161,11 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   prevBtn.onclick = () => {
     currentIndex = (currentIndex - 1 + playlist.length) % playlist.length;
-    playCurrent(audio, titleEl, artistEl, coverEl, playBtn, lyricContainer);
+    playCurrent();
   };
   nextBtn.onclick = () => {
     currentIndex = (currentIndex + 1) % playlist.length;
-    playCurrent(audio, titleEl, artistEl, coverEl, playBtn, lyricContainer);
+    playCurrent();
   };
   progressBar.onclick = e => {
     if (audio.duration) audio.currentTime = (e.offsetX / progressBar.offsetWidth) * audio.duration;
@@ -220,13 +179,11 @@ document.addEventListener('DOMContentLoaded', () => {
     progressFill.style.width = pct + '%';
     currentTimeEl.textContent = formatTime(audio.currentTime);
     durationEl.textContent = formatTime(audio.duration);
-    // 歌词高亮
-    if (lyricLines.length > 0) {
-      const idx = lyricLines.findIndex((l, i) => l.time <= audio.currentTime && (lyricLines[i+1]?.time > audio.currentTime || i === lyricLines.length - 1));
-      if (idx !== -1 && lyricContainer) {
-        lyricContainer.innerHTML = `<div>${lyricLines[idx].text}</div>`;
-        lyricContainer.classList.add('show');
-      }
+    // 歌词高亮 (借Solara简单find)
+    const line = lyricLines.find(l => l.time <= audio.currentTime && lyricLines[lyricLines.indexOf(l) + 1]?.time > audio.currentTime);
+    if (line && lyricContainer) {
+      lyricContainer.innerHTML = `<div>${line.text}</div>`;
+      lyricContainer.classList.add('show');
     }
   };
   audio.onended = () => nextBtn.click();
@@ -236,8 +193,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (confirm('清空?')) {
       playlist = [];
       currentIndex = 0;
-      savePlaylist(playlist);
-      renderPlaylist(playlistUl);
+      localStorage.setItem('playlist', JSON.stringify(playlist));
+      renderPlaylist();
       audio.pause();
       titleEl.textContent = '未播放';
     }
@@ -246,27 +203,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!e.target.closest('#playlist')) playlistPanel.classList.remove('show');
   };
 
-  function renderPlaylist(ul) {
-    ul.innerHTML = '';
+  function renderPlaylist() {
+    playlistUl.innerHTML = '';
     playlist.forEach((s, i) => {
       const li = document.createElement('li');
       li.textContent = `${s.name} - ${s.artist.join('/')}`;
       li.onclick = () => {
         currentIndex = i;
-        playCurrent(audio, titleEl, artistEl, coverEl, playBtn, lyricContainer);
+        playCurrent();
       };
-      ul.appendChild(li);
+      playlistUl.appendChild(li);
     });
   }
-  function highlightPlaylist(ul, idx) {
-    ul.querySelectorAll('li').forEach((li, i) => li.classList.toggle('playing', i === idx));
+  function highlightPlaylist() {
+    playlistUl.querySelectorAll('li').forEach((li, i) => li.classList.toggle('playing', i === currentIndex));
   }
-  function savePlaylist(pl) {
-    localStorage.setItem('playlist', JSON.stringify(pl));
-  }
-  function parseLrc(lrc) {
-    const lines = lrc.split('\n');
-    return lines.map(line => {
+  function parseLrc(lrc) {  // 借Solara正则
+    return lrc.split('\n').map(line => {
       const m = line.match(/\[(\d{2}):(\d{2})\.(\d{2})\](.*)/);
       if (m) return { time: parseInt(m[1]) * 60 + parseInt(m[2]) + parseInt(m[3]) / 100, text: m[4].trim() };
     }).filter(l => l);
