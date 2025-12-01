@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>私人音乐播放器 - 登录</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="login-body">
+  <div class="login-box">
+    <h1>私人音乐播放器</h1>
+    <input type="text" id="username" placeholder="用户名" autocomplete="off">
+    <input type="password" id="password" placeholder="密码" autocomplete="off">
+    <button id="loginBtn">登录</button>
+    <p class="tip">默认账号密码：admin / 123456（可自行修改 auth.json）</p>
+  </div>
+
+  <script>
+    // 简单的本地 auth.json 验证（个人用足够安全）
+    document.getElementById('loginBtn').onclick = async () => {
+      const u = document.getElementById('username').value.trim();
+      const p = document.getElementById('password').value;
+      if (!u || !p) return alert('请填写完整');
+
+      try {
+        const res = await fetch('/auth.json');
+        const auth = await res.json();
+
+        const user = auth.users.find(x => x.username === u && x.password === p);
+        if (user) {
+          localStorage.setItem('auth_token', btoa(u + ':' + p)); // 简单 token
+          location.href = '/player.html';
+        } else {
+          alert('用户名或密码错误');
+        }
+      } catch (e) {
+        alert('加载认证失败，请检查 auth.json');
+      }
+    };
+
+    // 回车登录
+    document.addEventListener('keydown', e => e.key === 'Enter' && document.getElementById('loginBtn').click());
+  </script>
+</body>
+</html>
