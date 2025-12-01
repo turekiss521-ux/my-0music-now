@@ -59,18 +59,36 @@ window.addEventListener('load', () => {
 
   // ==================== API 调用（借鉴原创：单源 + try-catch） ====================
   async function apiFetch(params, type = 'search') {
-    try {
-      const url = `${API}?${new URLSearchParams({ ...params, types: type }).toString()}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      console.log(`API 成功 (${type})`);
+  try {
+    const url = `/api.php?${new URLSearchParams({ ...params, types: type }).toString()}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    
+    // 验证数据
+    if (type === 'search' && Array.isArray(data) && data.length > 0) {
+      console.log('搜索成功！', data.length, '首歌');
       return data;
-    } catch (e) {
-      console.warn(`API 失败 (${type}):`, e.message);
-      throw e;
     }
+    if (type === 'url' && data.url && data.url.includes('.mp3')) {
+      console.log('链接成功！音质:', data.br);
+      return data;
+    }
+    if (type === 'lyric' && data.lyric) {
+      console.log('歌词成功！');
+      return data;
+    }
+    if (type === 'pic' && data.url) {
+      console.log('封面成功！');
+      return data;
+    }
+    
+    throw new Error('数据无效');
+  } catch (e) {
+    console.warn('API 失败:', e.message);
+    throw e;
   }
+}
 
   // ==================== 搜索 ====================
   searchBtn.onclick = () => search();
@@ -117,50 +135,54 @@ window.addEventListener('load', () => {
   }
 
   async function playCurrent() {
-    const song = playlist[currentIndex];
-    if (!song) return;
-    titleEl.textContent = song.name;
-    artistEl.textContent = song.artist.join(' / ');
-    const source = song.source || 'kuwo';
+  const song = playlist[currentIndex];
+  if (!song) return;
 
-    // 封面
-    const picUrl = song.pic_id ? `${API}?types=pic&source=${source}&id=${song.pic_id}&size=500` : PLACEHOLDER_COVER;
-    coverEl.src = picUrl;
-    coverEl.onerror = () => { coverEl.src = PLACEHOLDER_COVER; };
+  titleEl.textContent = song.name;
+  artistEl.textContent = song.artist.join(' / ');
+  const source = song.source || 'kuwo';
 
-    try {
-      let data;
-      let br = 320;
-      // 借鉴原创：固定320，失败降级128
+  // 封面
+  const picUrl = song.pic_id 
+    ? `/api.php?types=pic&source=${source}&id=${song.pic_id}&size=500` 
+    : PLACEHOLDER_COVER;
+  coverEl.src = picUrl;
+  coverEl.onerror = () => { coverEl.src = PLACEHOLDER_COVER; };
+
+  try {
+    let data;
+    let br = 320;
+    // 先试 320k
+    data = await apiFetch({ source, id: song.id, br }, 'url');
+    if (!data.url || !data.url.includes('.mp3')) {
+      console.log('320k 失败，降级 128k...');
+      br = 128;
       data = await apiFetch({ source, id: song.id, br }, 'url');
-      if (!data.url || !data.url.includes('.mp3')) {
-        console.log('320k 失败，降级到 128k...');
-        br = 128;
-        data = await apiFetch({ source, id: song.id, br }, 'url');
-      }
-
-      if (!data.url || !data.url.includes('.mp3')) {
-        throw new Error('无可用音频链接');
-      }
-
-      audio.src = data.url;
-      audio.load();
-      await audio.play();
-      playBtn.innerHTML = '<i class="fas fa-pause"></i>';
-      console.log('播放成功！', song.name, '音质:', data.br + 'k');
-
-      // 歌词（借鉴原创）
-      try {
-        const lrcData = await apiFetch({ source, id: song.lyric_id || song.id }, 'lyric');
-        lyricLines = parseLrc(lrcData.lyric || '');
-      } catch (e) { console.warn('歌词失败:', e.message); }
-
-      highlightPlaylist();
-      localStorage.setItem('currentIndex', currentIndex);
-    } catch (e) {
-      alert('播放失败：' + e.message + '\n建议：换源试试');
     }
+
+    if (!data.url || !data.url.includes('.mp3')) {
+      throw new Error('无可用链接');
+    }
+
+    audio.src = data.url;
+    audio.load();
+    await audio.play();
+    playBtn.innerHTML = '<i class="fas fa-pause"></i>';
+    console.log('🎵 播放成功！', song.name, '音质:', data.br + 'k');
+
+    // 歌词
+    try {
+      const lrcData = await apiFetch({ source, id: song.lyric_id || song.id }, 'lyric');
+      lyricLines = parseLrc(lrcData.lyric || '');
+    } catch (e) { console.warn('歌词失败:', e.message); }
+
+    highlightPlaylist();
+    localStorage.setItem('currentIndex', currentIndex);
+  } catch (e) {
+    alert('播放失败：' + e.message + '\n建议：换源试试');
+    console.error('播放错误:', e);
   }
+}
 
   // 事件监听
   playBtn.onclick = () => {
