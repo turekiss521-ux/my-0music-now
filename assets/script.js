@@ -1,5 +1,5 @@
-// ==================== 全局变量 (借Solara简洁) ====================
-const API = "https://music-api.gdstudio.xyz/api.php";  // 主API，Solara单源稳
+// ==================== 全局变量 ====================
+const API = "/api";  // 代理到Workers，绕CORS
 let playlist = JSON.parse(localStorage.getItem('playlist') || '[]');
 let currentIndex = parseInt(localStorage.getItem('currentIndex') || '0');
 let lyricLines = [];
@@ -9,7 +9,7 @@ const RATE_LIMIT_MAX = 60;
 const PLACEHOLDER_COVER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMzAiIGZpbGw9IiMzMzMiLz4KPHRleHQgeD0iMzAiIHk9IjM1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTk5IiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiPk5vIENvdmVyPC90ZXh0Pgo8L3N2Zz4K';
 
 // ==================== DOM & 初始化 ====================
-window.addEventListener('load', () => {  // 借Solara: window.onload，确保DOM ready
+window.addEventListener('load', () => {
   const $ = id => document.getElementById(id);
   const audio = $('audio');
   const searchInput = $('searchInput');
@@ -34,14 +34,13 @@ window.addEventListener('load', () => {  // 借Solara: window.onload，确保DOM
   const progressBar = document.querySelector('.progress-bar');
   const playlistBtn = $('playlistBtn');
 
-  // 音量
   volumeSlider.value = localStorage.getItem('volume') || 80;
   audio.volume = volumeSlider.value / 100;
 
   renderPlaylist();
   if (playlist.length > 0 && currentIndex < playlist.length) playCurrent();
 
-  // ==================== 限流 (保持你的) ====================
+  // ==================== 限流 ====================
   function checkRateLimit() {
     let requests = JSON.parse(localStorage.getItem(RATE_LIMIT_KEY) || '[]');
     const now = Date.now();
@@ -58,7 +57,7 @@ window.addEventListener('load', () => {  // 借Solara: window.onload，确保DOM
     return true;
   }
 
-  // ==================== API调用 (借Solara: 直接fetch + try-catch) ====================
+  // ==================== API调用 (借Solara: 简单fetch + CORS由Workers处理) ====================
   async function apiCall(params, type) {
     try {
       const url = `${API}?${new URLSearchParams({ ...params, types: type }).toString()}`;
@@ -73,7 +72,7 @@ window.addEventListener('load', () => {  // 借Solara: window.onload，确保DOM
     }
   }
 
-  // ==================== 搜索 (借Solara: 固定count=20, map简单) ====================
+  // ==================== 搜索 ====================
   searchBtn.onclick = () => search();
   searchInput.addEventListener('keydown', e => e.key === 'Enter' && search());
 
@@ -103,7 +102,7 @@ window.addEventListener('load', () => {  // 借Solara: window.onload，确保DOM
     }
   }
 
-  // ==================== 播放 (借Solara: fixed br=320, audio.load(), strict .mp3 check) ====================
+  // ==================== 播放 ====================
   function addToPlaylistAndPlay(song) {
     const exist = playlist.findIndex(s => s.id === song.id);
     if (exist !== -1) currentIndex = exist;
@@ -127,20 +126,19 @@ window.addEventListener('load', () => {  // 借Solara: window.onload，确保DOM
     coverEl.onerror = () => { coverEl.src = PLACEHOLDER_COVER; };
 
     try {
-      // 借Solara: fixed br=320, 验证 .mp3
       const data = await apiCall({ source, id: song.id, br: 320 }, 'url');
       if (!data.url || data.url.indexOf('.mp3') === -1) throw new Error('无效链接');
       audio.src = data.url;
-      audio.load();  // 借Solara: 强制reload
+      audio.load();  // 借Solara
       audio.play().catch(e => alert('播放失败: ' + e.message));
       playBtn.innerHTML = '<i class="fas fa-pause"></i>';
       console.log('Play URL:', data.url);
     } catch (e) {
-      alert('加载失败，换源试试: ' + e.message);  // 借Solara错误处理
+      alert('加载失败，换源试试: ' + e.message);
       return;
     }
 
-    // 歌词 (借Solara parse)
+    // 歌词
     try {
       const lrcData = await apiCall({ source, id: song.id }, 'lyric');
       lyricLines = parseLrc(lrcData.lyric || '');
@@ -149,7 +147,7 @@ window.addEventListener('load', () => {  // 借Solara: window.onload，确保DOM
     localStorage.setItem('currentIndex', currentIndex);
   }
 
-  // 事件 (语法修复: 显式参数)
+  // 事件 (保持上次fix)
   playBtn.onclick = () => {
     if (audio.paused) {
       audio.play();
@@ -179,7 +177,6 @@ window.addEventListener('load', () => {  // 借Solara: window.onload，确保DOM
     progressFill.style.width = pct + '%';
     currentTimeEl.textContent = formatTime(audio.currentTime);
     durationEl.textContent = formatTime(audio.duration);
-    // 歌词高亮 (借Solara简单find)
     const line = lyricLines.find(l => l.time <= audio.currentTime && lyricLines[lyricLines.indexOf(l) + 1]?.time > audio.currentTime);
     if (line && lyricContainer) {
       lyricContainer.innerHTML = `<div>${line.text}</div>`;
@@ -218,7 +215,7 @@ window.addEventListener('load', () => {  // 借Solara: window.onload，确保DOM
   function highlightPlaylist() {
     playlistUl.querySelectorAll('li').forEach((li, i) => li.classList.toggle('playing', i === currentIndex));
   }
-  function parseLrc(lrc) {  // 借Solara正则
+  function parseLrc(lrc) {
     return lrc.split('\n').map(line => {
       const m = line.match(/\[(\d{2}):(\d{2})\.(\d{2})\](.*)/);
       if (m) return { time: parseInt(m[1]) * 60 + parseInt(m[2]) + parseInt(m[3]) / 100, text: m[4].trim() };
