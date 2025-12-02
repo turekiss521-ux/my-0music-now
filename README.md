@@ -16,4 +16,4 @@
 使用 https://music-api.gdstudio.xyz （稳定源：kugou/kuwo）
 
 修改：编辑 auth.json 改密码，script.js 加功能。
-全程AI编写，具体效果未知，勿喷
+全程AI编写，项目是失败的，懒得删除了，不用瞅了
